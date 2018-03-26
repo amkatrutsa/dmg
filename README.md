@@ -11,7 +11,7 @@ from [PyAMG package](https://github.com/pyamg/pyamg).
 
 ## Run demo 
 
-We use Python 3 in our experiments.
+We use Python 3.5 in our experiments.
 To run demo notebooks, you should install [autograd](https://github.com/HIPS/autograd) package for
 automatic differentiation, standard numpy-scipy packages and matplotlib for simple visualization.
 Also to speed-up computations we use [jit compilation with numba](https://numba.pydata.org/).
