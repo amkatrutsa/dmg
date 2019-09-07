@@ -15,6 +15,7 @@ def csr_3mat(A_data, A_indptr, A_indices,
     B_csr = spsp.csr_matrix((B_data, B_indices, B_indptr), shape=(n, k))
     C_csr = spsp.csr_matrix((C_data, C_indices, C_indptr), shape=(k, l))
     D_csr = A_csr.dot(B_csr).dot(C_csr)
+    D_csr.eliminate_zeros()
     D_csr.sort_indices()
     return D_csr.data, D_csr.indices, D_csr.indptr
 
