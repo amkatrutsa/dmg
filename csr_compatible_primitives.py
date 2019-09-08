@@ -10,6 +10,30 @@ from numba import njit
 def csr_3mat(A_data, A_indptr, A_indices, 
                B_data, B_indptr, B_indices, 
                C_data, C_indptr, C_indices,
+               D_ref_indices, D_ref_indptr,
+               m, n, k, l):
+    A_csr = spsp.csr_matrix((A_data, A_indices, A_indptr), shape=(m, n))
+    B_csr = spsp.csr_matrix((B_data, B_indices, B_indptr), shape=(n, k))
+    C_csr = spsp.csr_matrix((C_data, C_indices, C_indptr), shape=(k, l))
+#     print(A_csr.dtype, B_csr.dtype, C_csr.dtype)
+    D_csr = A_csr.dot(B_csr).dot(C_csr)
+    D_csr.eliminate_zeros()
+    D_csr.sort_indices()
+    D_data = D_csr.data
+    if D_ref_indices.shape[0] != D_csr.data.shape[0]:
+#         print("Compare indices")
+#         print(D_ref_indptr - D_csr.indptr)
+#         print(D_csr.indptr)
+        D_data = prune_csr_matrix(D_ref_indptr, D_ref_indices, D_csr.indptr, D_csr.indices, D_csr.data)
+#         print(np.linalg.norm(D_data))
+#     D_csr = spsp.csr_matrix((D_data, copy.copy(D_ref_indices), copy.copy(D_ref_indptr)), shape=(m, l))
+#     D_csr.sort_indices()
+#     D_data = D_csr.data
+    return D_data, D_csr.indices, D_csr.indptr
+
+'''def csr_3mat(A_data, A_indptr, A_indices, 
+               B_data, B_indptr, B_indices, 
+               C_data, C_indptr, C_indices,
                m, n, k, l):
     A_csr = spsp.csr_matrix((A_data, A_indices, A_indptr), shape=(m, n))
     B_csr = spsp.csr_matrix((B_data, B_indices, B_indptr), shape=(n, k))
@@ -18,11 +42,12 @@ def csr_3mat(A_data, A_indptr, A_indices,
     D_csr.eliminate_zeros()
     D_csr.sort_indices()
     return D_csr.data, D_csr.indices, D_csr.indptr
+    '''
 
 @njit
 def prune_csr_matrix(ref_indptr, ref_indices,
                      pruned_indptr, pruned_indices, pruned_data):
-    A_grad = pure_np.zeros_like(ref_indices)
+    A_grad = pure_np.zeros((ref_indices.shape[0],))
     value_counter = 0
     for i in range(ref_indptr.shape[0] - 1):
         num_col = len(ref_indices[ref_indptr[i]:ref_indptr[i+1]])
@@ -36,12 +61,15 @@ def prune_csr_matrix(ref_indptr, ref_indices,
 def csr_3mat_vjp_Adata(g, ans, A_data, A_indptr, A_indices, 
                        B_data, B_indptr, B_indices, 
                        C_data, C_indptr, C_indices,
+                       D_ref_indices, D_ref_indptr,
                        m, n, k, l):
     g_data = g[0]
 #     A_csr = spsp.csr_matrix((A_data, A_indices, A_indptr), shape=(m, n))
     B_csr = spsp.csr_matrix((B_data, B_indices, B_indptr), shape=(n, k))
     C_csr = spsp.csr_matrix((C_data, C_indices, C_indptr), shape=(k, l))
-    G_csr = spsp.csr_matrix((g_data, ans[1], ans[2]))
+    # print(g_data.shape, ans[1].shape, ans[2].shape, g[1].shape)
+    # G_csr = spsp.csr_matrix((g_data, ans[1], ans[2]), shape=(m, l))
+    G_csr = spsp.csr_matrix((g_data, D_ref_indices, D_ref_indptr), shape=(m, l))
     BC = B_csr.dot(C_csr)
     A_grad_csr = G_csr.dot(BC.transpose().tocsr())
     A_grad_csr.sort_indices()
@@ -51,10 +79,12 @@ def csr_3mat_vjp_Adata(g, ans, A_data, A_indptr, A_indices,
 def csr_3mat_vjp_Bdata(g, ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l):
     g_data = g[0]
     A_csr = spsp.csr_matrix((A_data, A_indices, A_indptr), shape=(m, n))
-    G_csr = spsp.csr_matrix((g_data, ans[1], ans[2]))
+    # G_csr = spsp.csr_matrix((g_data, ans[1], ans[2]))
+    G_csr = spsp.csr_matrix((g_data, D_ref_indices, D_ref_indptr))
     C_csr = spsp.csr_matrix((C_data, C_indices, C_indptr), shape=(k, l))
     A_csr_t = A_csr.transpose().tocsr()
     C_csr_t = C_csr.transpose().tocsr()
@@ -74,10 +104,12 @@ def csr_3mat_vjp_Bdata(g, ans, A_data, A_indptr, A_indices,
 def csr_3mat_vjp_Cdata(g, ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l):
     g_data = g[0]
     A_csr = spsp.csr_matrix((A_data, A_indices, A_indptr), shape=(m, n))
-    G_csr = spsp.csr_matrix((g_data, ans[1], ans[2]))
+    # G_csr = spsp.csr_matrix((g_data, ans[1], ans[2]))
+    G_csr = spsp.csr_matrix((g_data, D_ref_indices, D_ref_indptr))
     B_csr = spsp.csr_matrix((B_data, B_indices, B_indptr), shape=(n, k))
 #     C_csr = spsp.csr_matrix((C_data, C_indices, C_indptr), shape=(k, l))
     AB = A_csr.dot(B_csr)
@@ -94,26 +126,32 @@ def csr_3mat_vjp_Cdata(g, ans, A_data, A_indptr, A_indices,
 defvjp(csr_3mat, lambda ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l: 
                            lambda g: csr_3mat_vjp_Adata(g, ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l),
                    lambda ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l: 
                            lambda g: csr_3mat_vjp_Bdata(g, ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l),
                   lambda ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l: 
                            lambda g: csr_3mat_vjp_Cdata(g, ans, A_data, A_indptr, A_indices, 
                                  B_data, B_indptr, B_indices, 
                                  C_data, C_indptr, C_indices,
+                                 D_ref_indices, D_ref_indptr,
                                  m, n, k, l),
       argnums=[0, 3, 6])
 
